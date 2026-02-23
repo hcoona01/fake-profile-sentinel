@@ -1,0 +1,12 @@
+api/ml/model.pkl
+api/ml/scaler.pkl
+api/ml/feature_names.pkl
+__pycache__/
+*.pyc
+node_modules/
+node_modules/
+.next/
+dist/
+.envnode_modules/
+.next/
+.env
