@@ -38,7 +38,7 @@ export default function UploadForm({ onResult, onLoading }: UploadFormProps) {
     e.preventDefault();
     onLoading(true);
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/analyze`, {
+      const response = await fetch("https://fake-profile-sentinel-oocw.vercel.app/api/analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
