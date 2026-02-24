@@ -1,10 +1,14 @@
 from flask import Flask, request, jsonify
-from flask_cors import CORS
+#from flask_cors import CORS
 import joblib
 import numpy as np
 import pandas as pd
 import os
 
+from flask_cors import CORS
+
+# Replace the old CORS line with this:
+CORS(app, resources={r"/api/*": {"origins": ["https://fake-profile-sentinel-frontend.vercel.app", "http://localhost:3000"]}})
 app = Flask(__name__)
 CORS(app)
 
