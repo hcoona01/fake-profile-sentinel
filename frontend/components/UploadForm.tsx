@@ -1,127 +1,109 @@
-import { useState } from "react";
+from flask import Flask, request, jsonify
+from flask_cors import CORS
+import joblib
+import numpy as np
+import pandas as pd
+import os
 
-interface FormData {
-  username: string;
-  follower_count: string;
-  following_count: string;
-  tweet_count: string;
-  account_age_days: string;
-  hashtags_per_tweet: string;
-  mentions_per_tweet: string;
-  avg_tweet_length: string;
-  contains_spam_words: string;
-}
+app = Flask(__name__)
 
-interface UploadFormProps {
-  onResult: (result: any) => void;
-  onLoading: (loading: boolean) => void;
-}
+# Corrected CORS setup: It must come AFTER 'app' is defined
+CORS(app, resources={r"/api/*": {"origins": "*"}})
 
-export default function UploadForm({ onResult, onLoading }: UploadFormProps) {
-  const [form, setForm] = useState<FormData>({
-    username: "",
-    follower_count: "",
-    following_count: "",
-    tweet_count: "",
-    account_age_days: "",
-    hashtags_per_tweet: "",
-    mentions_per_tweet: "",
-    avg_tweet_length: "",
-    contains_spam_words: "0",
-  });
+# Load models
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+ML_DIR = os.path.join(BASE_DIR, "ml")
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-    setForm({ ...form, [e.target.name]: e.target.value });
-  };
+model = joblib.load(os.path.join(ML_DIR, "model.pkl"))
+scaler = joblib.load(os.path.join(ML_DIR, "scaler.pkl"))
+feature_names = joblib.load(os.path.join(ML_DIR, "feature_names.pkl"))
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    onLoading(true);
-    try {
-      const response = await fetch("https://fake-profile-sentinel-oocw.vercel.app/api/analyze", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          username: form.username,
-          follower_count: parseFloat(form.follower_count),
-          following_count: parseFloat(form.following_count),
-          tweet_count: parseFloat(form.tweet_count),
-          account_age_days: parseFloat(form.account_age_days),
-          hashtags_per_tweet: parseFloat(form.hashtags_per_tweet),
-          mentions_per_tweet: parseFloat(form.mentions_per_tweet),
-          avg_tweet_length: parseFloat(form.avg_tweet_length),
-          contains_spam_words: parseInt(form.contains_spam_words),
-        }),
-      });
-      const data = await response.json();
-      onResult(data);
-    } catch (err) {
-      alert("Error connecting to API. Make sure backend is running.");
-    }
-    onLoading(false);
-  };
+@app.route("/api/analyze", methods=["POST"])
+def analyze():
+    data = request.get_json()
 
-  const fields = [
-    { name: "follower_count", label: "Follower Count" },
-    { name: "following_count", label: "Following Count" },
-    { name: "tweet_count", label: "Tweet Count" },
-    { name: "account_age_days", label: "Account Age (days)" },
-    { name: "hashtags_per_tweet", label: "Hashtags Per Tweet" },
-    { name: "mentions_per_tweet", label: "Mentions Per Tweet" },
-    { name: "avg_tweet_length", label: "Avg Tweet Length" },
-  ];
+    username = data.get("username", "unknown")
+    follower_count = float(data.get("follower_count", 0))
+    following_count = float(data.get("following_count", 0))
+    tweet_count = float(data.get("tweet_count", 0))
+    account_age_days = float(data.get("account_age_days", 0))
+    hashtags_per_tweet = float(data.get("hashtags_per_tweet", 0))
+    mentions_per_tweet = float(data.get("mentions_per_tweet", 0))
+    avg_tweet_length = float(data.get("avg_tweet_length", 0))
+    contains_spam_words = int(data.get("contains_spam_words", 0))
 
-  return (
-    <form onSubmit={handleSubmit} className="w-full max-w-xl mx-auto space-y-4">
-      <div>
-        <label className="text-gray-400 text-sm">Username</label>
-        <input
-          name="username"
-          value={form.username}
-          onChange={handleChange}
-          required
-          placeholder="e.g. crypto_earn123"
-          className="w-full mt-1 bg-gray-800 border border-gray-600 rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-blue-500"
-        />
-      </div>
+    reasons = []
 
-      <div className="grid grid-cols-2 gap-4">
-        {fields.map((field) => (
-          <div key={field.name}>
-            <label className="text-gray-400 text-sm">{field.label}</label>
-            <input
-              name={field.name}
-              value={form[field.name as keyof FormData]}
-              onChange={handleChange}
-              required
-              type="number"
-              min="0"
-              placeholder="0"
-              className="w-full mt-1 bg-gray-800 border border-gray-600 rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-blue-500"
-            />
-          </div>
-        ))}
+    input_df = pd.DataFrame([[
+        follower_count,
+        following_count,
+        tweet_count,
+        account_age_days,
+        hashtags_per_tweet,
+        mentions_per_tweet,
+        avg_tweet_length,
+        contains_spam_words
+    ]], columns=feature_names)
 
-        <div>
-          <label className="text-gray-400 text-sm">Contains Spam Words</label>
-          <select
-            name="contains_spam_words"
-            value={form.contains_spam_words}
-            onChange={handleChange}
-            className="w-full mt-1 bg-gray-800 border border-gray-600 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-blue-500"
-          >
-            <option value="0">No</option>
-            <option value="1">Yes</option>
-          </select>
-        </div>
-      </div>
+    scaled = scaler.transform(input_df)
+    bot_prob = model.predict_proba(scaled)[0][1]
+    ml_trust = (1 - bot_prob) * 70
 
-      <button
-        type="submit"
-        className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-xl transition-all duration-200"
-      >
-        🔍 Analyze Profile
-      </button>
-    </form>
-  );
-}
+    rule_score = 30
+    penalty = 0
+
+    if account_age_days < 180:
+        penalty += 5
+        reasons.append("Very new account")
+
+    if follower_count < 100:
+        penalty += 5
+        reasons.append("Low follower count")
+
+    if following_count > 0 and (follower_count / following_count) < 0.2:
+        penalty += 4
+        reasons.append("Suspicious follower-to-following ratio")
+
+    if contains_spam_words == 1:
+        penalty += 6
+        reasons.append("Contains spam-related content")
+
+    if hashtags_per_tweet > 5:
+        penalty += 3
+        reasons.append("Excessive hashtag usage")
+
+    if mentions_per_tweet > 5:
+        penalty += 3
+        reasons.append("Excessive mention usage")
+
+    if avg_tweet_length < 40:
+        penalty += 2
+        reasons.append("Very short average tweet length")
+
+    rule_trust = max(rule_score - penalty, 0)
+    trust_score = max(0, min(100, round(ml_trust + rule_trust, 2)))
+
+    if trust_score >= 70:
+        risk_level = "LOW"
+    elif trust_score >= 40:
+        risk_level = "MEDIUM"
+    else:
+        risk_level = "HIGH"
+
+    if bot_prob > 0.7:
+        reasons.append("ML model strongly predicts bot behavior")
+    elif bot_prob > 0.4:
+        reasons.append("ML model indicates moderate bot likelihood")
+    else:
+        reasons.append("ML model indicates human-like behavior")
+
+    return jsonify({
+        "username": username,
+        "trust_score": trust_score,
+        "risk_level": risk_level,
+        "bot_probability": round(float(bot_prob), 4),
+        "reasons": reasons
+    })
+
+if __name__ == "__main__":
+    app.run(debug=True, port=5000)
